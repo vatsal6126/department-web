@@ -4,7 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
 export default defineConfig({
-  // Tells Vite your site lives inside the repository subfolder
+  // GitHub Pages serves this project from its repository subfolder.
   base: '/department-web/',
   plugins: [react(), tailwindcss(), viteSingleFile()],
 });
