@@ -5,6 +5,6 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 
 export default defineConfig({
   // Tells Vite your site lives inside the repository subfolder
-  base: '/ldce-chem-dept/',
+  base: '/department-web/',
   plugins: [react(), tailwindcss(), viteSingleFile()],
 });
