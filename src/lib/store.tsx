@@ -1,5 +1,15 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  onSnapshot,
+  setDoc,
+  writeBatch,
+} from 'firebase/firestore';
+import {
   NOTICES as DEFAULT_NOTICES,
   EVENTS as DEFAULT_EVENTS,
   FACULTY as DEFAULT_FACULTY,
@@ -7,6 +17,8 @@ import {
   LABORATORIES as DEFAULT_LABORATORIES,
   STATS as DEFAULT_STATS,
 } from '../data/content';
+import { db, isFirebaseConfigured } from './firebase';
+import { useAuth } from './auth';
 
 export interface NoticeItem {
   id?: string;
@@ -63,112 +75,92 @@ interface ContentStoreType {
   courses: CourseItem[];
   laboratories: LabItem[];
   stats: typeof DEFAULT_STATS;
-  addNotice: (item: NoticeItem) => void;
-  updateNotice: (index: number, item: NoticeItem) => void;
-  deleteNotice: (index: number) => void;
-  addEvent: (item: EventItem) => void;
-  updateEvent: (index: number, item: EventItem) => void;
-  deleteEvent: (index: number) => void;
-  addFaculty: (item: FacultyItem) => void;
-  updateFaculty: (index: number, item: FacultyItem) => void;
-  deleteFaculty: (index: number) => void;
-  resetToDefaults: () => void;
+  addNotice: (item: NoticeItem) => Promise<void>;
+  updateNotice: (index: number, item: NoticeItem) => Promise<void>;
+  deleteNotice: (index: number) => Promise<void>;
+  addEvent: (item: EventItem) => Promise<void>;
+  updateEvent: (index: number, item: EventItem) => Promise<void>;
+  deleteEvent: (index: number) => Promise<void>;
+  addFaculty: (item: FacultyItem) => Promise<void>;
+  updateFaculty: (index: number, item: FacultyItem) => Promise<void>;
+  deleteFaculty: (index: number) => Promise<void>;
 }
 
 const ContentStoreContext = createContext<ContentStoreType | null>(null);
 
-const STORAGE_KEYS = {
-  NOTICES: 'ldce_store_notices',
-  EVENTS: 'ldce_store_events',
-  FACULTY: 'ldce_store_faculty',
-  COURSES: 'ldce_store_courses',
-  LABS: 'ldce_store_labs',
+const defaults = {
+  notices: DEFAULT_NOTICES.map((item, index) => ({ ...item, id: `notice-${index + 1}` })),
+  events: DEFAULT_EVENTS.map((item, index) => ({ ...item, id: `event-${index + 1}` })),
+  faculty: DEFAULT_FACULTY.map((item, index) => ({ ...item, id: `faculty-${index + 1}` })),
 };
 
+type RemoteCollection = 'notices' | 'events' | 'faculty';
+
+const remoteCollection = (name: RemoteCollection) => collection(db, 'content', name, 'items');
+const remoteDocument = (name: RemoteCollection, id: string) => doc(db, 'content', name, 'items', id);
+
+async function seedCollection(name: RemoteCollection, items: object[]) {
+  const snapshot = await getDocs(remoteCollection(name));
+  if (!snapshot.empty) return;
+
+  const batch = writeBatch(db);
+  items.forEach((item) => {
+    const id = (item as { id: string }).id;
+    batch.set(remoteDocument(name, id), item);
+  });
+  await batch.commit();
+}
+
 export const ContentStoreProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [notices, setNotices] = useState<NoticeItem[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.NOTICES);
-      return saved ? JSON.parse(saved) : DEFAULT_NOTICES;
-    } catch {
-      return DEFAULT_NOTICES;
-    }
-  });
-
-  const [events, setEvents] = useState<EventItem[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.EVENTS);
-      return saved ? JSON.parse(saved) : DEFAULT_EVENTS;
-    } catch {
-      return DEFAULT_EVENTS;
-    }
-  });
-
-  const [faculty, setFaculty] = useState<FacultyItem[]>(() => {
-    try {
-      const saved = localStorage.getItem(STORAGE_KEYS.FACULTY);
-      return saved ? JSON.parse(saved) : DEFAULT_FACULTY;
-    } catch {
-      return DEFAULT_FACULTY;
-    }
-  });
-
+  const { isAdmin } = useAuth();
+  const [notices, setNotices] = useState<NoticeItem[]>(defaults.notices);
+  const [events, setEvents] = useState<EventItem[]>(defaults.events);
+  const [faculty, setFaculty] = useState<FacultyItem[]>(defaults.faculty);
   const [courses] = useState<CourseItem[]>(DEFAULT_COURSES);
   const [laboratories] = useState<LabItem[]>(DEFAULT_LABORATORIES);
 
-  // Sync to local storage
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.NOTICES, JSON.stringify(notices));
-  }, [notices]);
+    if (!isFirebaseConfigured) return undefined;
+
+    const noticeUnsubscribe = onSnapshot(remoteCollection('notices'), (snapshot) => {
+      setNotices(snapshot.empty ? defaults.notices : snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as NoticeItem)));
+    }, (error) => console.error('Failed to load notices from Firestore.', error));
+    const eventUnsubscribe = onSnapshot(remoteCollection('events'), (snapshot) => {
+      setEvents(snapshot.empty ? defaults.events : snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as EventItem)));
+    }, (error) => console.error('Failed to load events from Firestore.', error));
+    const facultyUnsubscribe = onSnapshot(remoteCollection('faculty'), (snapshot) => {
+      setFaculty(snapshot.empty ? defaults.faculty : snapshot.docs.map((item) => ({ id: item.id, ...item.data() } as FacultyItem)));
+    }, (error) => console.error('Failed to load faculty from Firestore.', error));
+
+    return () => {
+      noticeUnsubscribe();
+      eventUnsubscribe();
+      facultyUnsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.EVENTS, JSON.stringify(events));
-  }, [events]);
+    if (!isFirebaseConfigured || !isAdmin) return;
+    void Promise.all([
+      seedCollection('notices', defaults.notices),
+      seedCollection('events', defaults.events),
+      seedCollection('faculty', defaults.faculty),
+    ]).catch((error) => console.error('Failed to initialize Firestore content.', error));
+  }, [isAdmin]);
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.FACULTY, JSON.stringify(faculty));
-  }, [faculty]);
-
-  const addNotice = (item: NoticeItem) => {
-    setNotices((prev) => [item, ...prev]);
-  };
-
-  const deleteNotice = (index: number) => {
-    setNotices((prev) => prev.filter((_, i) => i !== index));
-  };
-  const updateNotice = (index: number, item: NoticeItem) => {
-    setNotices((prev) => prev.map((notice, i) => (i === index ? item : notice)));
+  const addItem = async (name: RemoteCollection, item: object) => {
+    await addDoc(remoteCollection(name), item);
   };
 
-  const addEvent = (item: EventItem) => {
-    setEvents((prev) => [item, ...prev]);
+  const updateItem = async (name: RemoteCollection, item: { id?: string }) => {
+    if (!item.id) throw new Error('Cannot update a content item without an id.');
+    const { id, ...data } = item;
+    await setDoc(remoteDocument(name, id), data, { merge: true });
   };
 
-  const deleteEvent = (index: number) => {
-    setEvents((prev) => prev.filter((_, i) => i !== index));
-  };
-  const updateEvent = (index: number, item: EventItem) => {
-    setEvents((prev) => prev.map((event, i) => (i === index ? item : event)));
-  };
-
-  const addFaculty = (item: FacultyItem) => {
-    setFaculty((prev) => [...prev, item]);
-  };
-
-  const deleteFaculty = (index: number) => {
-    setFaculty((prev) => prev.filter((_, i) => i !== index));
-  };
-  const updateFaculty = (index: number, item: FacultyItem) => {
-    setFaculty((prev) => prev.map((member, i) => (i === index ? item : member)));
-  };
-
-  const resetToDefaults = () => {
-    setNotices(DEFAULT_NOTICES);
-    setEvents(DEFAULT_EVENTS);
-    setFaculty(DEFAULT_FACULTY);
-    localStorage.removeItem(STORAGE_KEYS.NOTICES);
-    localStorage.removeItem(STORAGE_KEYS.EVENTS);
-    localStorage.removeItem(STORAGE_KEYS.FACULTY);
+  const deleteItem = async (name: RemoteCollection, item: { id?: string }) => {
+    if (!item.id) throw new Error('Cannot delete a content item without an id.');
+    await deleteDoc(remoteDocument(name, item.id));
   };
 
   return (
@@ -180,16 +172,15 @@ export const ContentStoreProvider: React.FC<{ children: React.ReactNode }> = ({ 
         courses,
         laboratories,
         stats: DEFAULT_STATS,
-        addNotice,
-        updateNotice,
-        deleteNotice,
-        addEvent,
-        updateEvent,
-        deleteEvent,
-        addFaculty,
-        updateFaculty,
-        deleteFaculty,
-        resetToDefaults,
+        addNotice: (item) => addItem('notices', item),
+        updateNotice: (_index, item) => updateItem('notices', item),
+        deleteNotice: (index) => deleteItem('notices', notices[index]),
+        addEvent: (item) => addItem('events', item),
+        updateEvent: (_index, item) => updateItem('events', item),
+        deleteEvent: (index) => deleteItem('events', events[index]),
+        addFaculty: (item) => addItem('faculty', item),
+        updateFaculty: (_index, item) => updateItem('faculty', item),
+        deleteFaculty: (index) => deleteItem('faculty', faculty[index]),
       }}
     >
       {children}
@@ -199,8 +190,6 @@ export const ContentStoreProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
 export const useContentStore = () => {
   const context = useContext(ContentStoreContext);
-  if (!context) {
-    throw new Error('useContentStore must be used within a ContentStoreProvider');
-  }
+  if (!context) throw new Error('useContentStore must be used within a ContentStoreProvider');
   return context;
 };

@@ -76,7 +76,7 @@ export const More: React.FC = () => {
     }
   };
 
-  const handleCreateNotice = (e: React.FormEvent) => {
+  const handleCreateNotice = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!noticeTitle.trim() || !noticeDesc.trim()) return;
 
@@ -88,8 +88,14 @@ export const More: React.FC = () => {
       isUrgent: noticeUrgent,
       downloadUrl: noticePdfUrl || '#/notices',
     };
-    if (editingNoticeIndex === null) store.addNotice(item);
-    else store.updateNotice(editingNoticeIndex, { ...item, id: store.notices[editingNoticeIndex].id });
+    try {
+      if (editingNoticeIndex === null) await store.addNotice(item);
+      else await store.updateNotice(editingNoticeIndex, { ...item, id: store.notices[editingNoticeIndex].id });
+    } catch (error) {
+      console.error('Failed to save notice.', error);
+      alert('Notice could not be saved. Please try again.');
+      return;
+    }
 
     setNoticeTitle('');
     setNoticeDesc('');
@@ -101,7 +107,7 @@ export const More: React.FC = () => {
   };
 
   // Event Handlers
-  const handleCreateEvent = (e: React.FormEvent) => {
+  const handleCreateEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!eventTitle.trim() || !eventDesc.trim() || !eventDate.trim()) return;
 
@@ -113,8 +119,14 @@ export const More: React.FC = () => {
       date: eventDate.trim(),
       venue: eventVenue.trim(),
     };
-    if (editingEventIndex === null) store.addEvent(item);
-    else store.updateEvent(editingEventIndex, { ...item, id: store.events[editingEventIndex].id });
+    try {
+      if (editingEventIndex === null) await store.addEvent(item);
+      else await store.updateEvent(editingEventIndex, { ...item, id: store.events[editingEventIndex].id });
+    } catch (error) {
+      console.error('Failed to save event.', error);
+      alert('Event could not be saved. Please try again.');
+      return;
+    }
 
     setEventTitle('');
     setEventDesc('');
@@ -141,7 +153,7 @@ export const More: React.FC = () => {
     }
   };
 
-  const handleCreateFaculty = (e: React.FormEvent) => {
+  const handleCreateFaculty = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!facultyName.trim() || !facultyEmail.trim()) return;
 
@@ -155,8 +167,14 @@ export const More: React.FC = () => {
       experience: facultyExp.trim() || '5+ Years',
       image: facultyImgUrl || 'images/faculty1.png',
     };
-    if (editingFacultyIndex === null) store.addFaculty(item);
-    else store.updateFaculty(editingFacultyIndex, { ...item, id: store.faculty[editingFacultyIndex].id });
+    try {
+      if (editingFacultyIndex === null) await store.addFaculty(item);
+      else await store.updateFaculty(editingFacultyIndex, { ...item, id: store.faculty[editingFacultyIndex].id });
+    } catch (error) {
+      console.error('Failed to save faculty member.', error);
+      alert('Faculty profile could not be saved. Please try again.');
+      return;
+    }
 
     setFacultyName('');
     setFacultyEmail('');
@@ -364,7 +382,7 @@ export const More: React.FC = () => {
                     </div>
                     <div className="admin-item-actions">
                       <button type="button" onClick={() => editNotice(idx)} className="edit-item-btn" title="Edit Notice"><Pencil size={15} /></button>
-                      <button type="button" onClick={() => store.deleteNotice(idx)} className="delete-item-btn" title="Delete Notice"><Trash2 size={16} /></button>
+                      <button type="button" onClick={() => void store.deleteNotice(idx).catch((error) => { console.error('Failed to delete notice.', error); alert('Notice could not be deleted.'); })} className="delete-item-btn" title="Delete Notice"><Trash2 size={16} /></button>
                     </div>
                   </div>
                 ))}
@@ -486,7 +504,7 @@ export const More: React.FC = () => {
                     </div>
                     <div className="admin-item-actions">
                       <button type="button" onClick={() => editEvent(idx)} className="edit-item-btn" title="Edit Event"><Pencil size={15} /></button>
-                      <button type="button" onClick={() => store.deleteEvent(idx)} className="delete-item-btn" title="Delete Event"><Trash2 size={16} /></button>
+                      <button type="button" onClick={() => void store.deleteEvent(idx).catch((error) => { console.error('Failed to delete event.', error); alert('Event could not be deleted.'); })} className="delete-item-btn" title="Delete Event"><Trash2 size={16} /></button>
                     </div>
                   </div>
                 ))}
@@ -641,7 +659,7 @@ export const More: React.FC = () => {
                     </div>
                     <div className="admin-item-actions">
                       <button type="button" onClick={() => editFaculty(idx)} className="edit-item-btn" title="Edit Faculty"><Pencil size={15} /></button>
-                      <button type="button" onClick={() => store.deleteFaculty(idx)} className="delete-item-btn" title="Delete Faculty"><Trash2 size={16} /></button>
+                      <button type="button" onClick={() => void store.deleteFaculty(idx).catch((error) => { console.error('Failed to delete faculty member.', error); alert('Faculty profile could not be deleted.'); })} className="delete-item-btn" title="Delete Faculty"><Trash2 size={16} /></button>
                     </div>
                   </div>
                 ))}

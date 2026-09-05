@@ -13,6 +13,7 @@ import { Home } from './pages/Home';
 import { Notices } from './pages/Notices';
 import { More } from './pages/More';
 import { AdminLogin } from './pages/AdminLogin';
+import { AuthProvider, useAuth } from './lib/auth';
 
 const PAGES: Record<Route, React.ComponentType> = {
   '/': Home,
@@ -26,16 +27,17 @@ const PAGES: Record<Route, React.ComponentType> = {
 
 const MainContent: React.FC = () => {
   const { currentRoute, navigate } = useRouter();
+  const { user, isAdmin, loading } = useAuth();
   const Component = PAGES[currentRoute];
   const shouldReduceMotion = useReducedMotion();
 
   const requiresLogin = currentRoute === '/more';
 
   useEffect(() => {
-    if (requiresLogin) navigate('/admin-login');
-  }, [requiresLogin, navigate]);
+    if (!loading && requiresLogin && (!user || !isAdmin)) navigate('/admin-login');
+  }, [requiresLogin, navigate, user, isAdmin, loading]);
 
-  if (requiresLogin) {
+  if (loading || (requiresLogin && (!user || !isAdmin))) {
     return null;
   }
 
@@ -63,15 +65,16 @@ const MainContent: React.FC = () => {
 
 export const App: React.FC = () => {
   return (
-    <ContentStoreProvider>
-      <RouterProvider>
-        {/* WatermarkEngine is placed here at the absolute root */}
-        <WatermarkEngine />
-        <Navbar />
-        <MainContent />
-        <Footer />
-      </RouterProvider>
-    </ContentStoreProvider>
+    <AuthProvider>
+      <ContentStoreProvider>
+        <RouterProvider>
+          <WatermarkEngine />
+          <Navbar />
+          <MainContent />
+          <Footer />
+        </RouterProvider>
+      </ContentStoreProvider>
+    </AuthProvider>
   );
 };
 

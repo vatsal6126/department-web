@@ -12,6 +12,7 @@ interface AuthContextType {
   user: User | null;
   isAdmin: boolean;
   loading: boolean;
+  isFirebaseConfigured: boolean;
   signIn: (username: string, password: string) => Promise<void>;
   signOutAdmin: () => Promise<void>;
 }
@@ -34,7 +35,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return undefined;
     }
 
-    return onAuthStateChanged(auth, async (nextUser) => {
+    return onAuthStateChanged(auth, (nextUser) => {
       setUser(nextUser);
       if (!nextUser) {
         setIsAdmin(false);
@@ -42,9 +43,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      const adminSnapshot = await getDoc(doc(db, 'admins', nextUser.uid));
-      setIsAdmin(adminSnapshot.exists() && adminSnapshot.data().enabled === true);
-      setLoading(false);
+      void getDoc(doc(db, 'admins', nextUser.uid))
+        .then((adminSnapshot) => {
+          setIsAdmin(adminSnapshot.exists() && adminSnapshot.data().enabled === true);
+        })
+        .catch((error) => {
+          console.error('Failed to verify administrator access.', error);
+          setIsAdmin(false);
+        })
+        .finally(() => setLoading(false));
     });
   }, []);
 
@@ -52,6 +59,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     user,
     isAdmin,
     loading,
+    isFirebaseConfigured,
     signIn: async (username, password) => {
       if (!isFirebaseConfigured) {
         throw new Error('Firebase is not configured yet.');
